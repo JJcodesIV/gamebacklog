@@ -15,6 +15,8 @@
       --text-muted: #94a3b8;
       --radius: 10px;
       --shadow: 0 2px 8px rgba(0,0,0,.12);
+      --cover-size: 70px;
+      --cover-size-mobile: 50px;
     }
     body {
       margin: 0;
@@ -83,10 +85,13 @@
       box-shadow: var(--shadow);
       padding: 1rem 1.1rem 0.7rem 1.1rem;
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
+      align-items: flex-start;
       position: relative;
       border: 1.5px solid transparent;
       transition: border 0.2s;
+      min-height: var(--cover-size);
+      gap: 1.1rem;
     }
     .game-card[data-status="Completed"] {
       border-color: var(--primary);
@@ -99,6 +104,33 @@
     }
     .game-card[data-status="Not Started"] {
       border-color: var(--border);
+    }
+    .game-cover {
+      width: var(--cover-size);
+      height: var(--cover-size);
+      min-width: var(--cover-size);
+      min-height: var(--cover-size);
+      background: #22232e;
+      border-radius: 8px;
+      object-fit: cover;
+      box-shadow: 0 0 7px 0 rgba(0,0,0,0.19);
+      margin-right: 0.5rem;
+      user-select: none;
+    }
+    @media (max-width: 500px) {
+      .game-card { gap: 0.7rem; padding: 0.7rem 0.7rem 0.5rem 0.7rem;}
+      .game-cover, .game-cover-fallback {
+        width: var(--cover-size-mobile);
+        height: var(--cover-size-mobile);
+        min-width: var(--cover-size-mobile);
+        min-height: var(--cover-size-mobile);
+      }
+    }
+    .game-info {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
     }
     .game-title {
       font-size: 1.1rem;
@@ -225,6 +257,54 @@
       cursor: pointer;
       z-index: 1;
     }
+    .cover-preview-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.1rem;
+    }
+    .cover-preview-label {
+      font-size: 0.97rem;
+      color: var(--text-muted);
+      margin-bottom: 0.2rem;
+    }
+    .cover-preview-img {
+      width: 64px; height: 64px;
+      border-radius: 8px;
+      background: #212135;
+      object-fit: cover;
+      display: block;
+      box-shadow: 0 0 7px 0 rgba(0,0,0,0.17);
+    }
+    .cover-preview-fallback {
+      width: 64px; height: 64px;
+      background: #202034;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #6ee7b7;
+      font-size: 2.3em;
+      box-shadow: 0 0 7px 0 rgba(0,0,0,0.15);
+    }
+    .cover-searching {
+      color: var(--accent);
+      font-size: 0.98em;
+      margin-bottom: 0.3em;
+      display: flex;
+      align-items: center;
+      gap: 0.45em;
+    }
+    .cover-searching spinner {
+      width: 1em; height: 1em;
+      border: 2.5px solid var(--primary);
+      border-top: 2.5px solid var(--accent);
+      border-radius: 50%;
+      display: inline-block;
+      animation: spin 0.9s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { 100% {transform: rotate(360deg);} }
     @keyframes fadein {
       from { opacity: 0; }
       to   { opacity: 1; }
@@ -301,6 +381,20 @@
         <input type="text" id="gameTitleInput" maxlength="80" required autofocus />
         <label for="gamePlatformInput">Platform <span style="color:#f43f5e">*</span></label>
         <input type="text" id="gamePlatformInput" maxlength="45" required />
+
+        <!-- Cover Art Preview -->
+        <div class="cover-preview-row" id="coverPreviewRow" style="display:none;">
+          <div>
+            <div class="cover-preview-label">Cover Preview</div>
+            <div id="coverPreviewContainer"></div>
+          </div>
+          <button type="button" class="btn btn-ghost" id="retryCoverBtn" style="display:none; margin-top: 1em; height:2.4em; align-self:flex-end;">Try Again</button>
+        </div>
+        <div class="cover-searching" id="coverSearching" style="display:none;">
+          <span style="display:inline-block;width:1em;height:1em;border:2.5px solid var(--primary);border-top:2.5px solid var(--accent);border-radius:50%;animation:spin 0.9s linear infinite;vertical-align:middle;"></span>
+          <span>Searching for cover art…</span>
+        </div>
+
         <label for="gameStatusInput">Status</label>
         <select id="gameStatusInput">
           <option>Not Started</option>
@@ -330,7 +424,7 @@
     }
 
     // Data persistence
-    const STORAGE_KEY = 'vg_backlog_list';
+    const STORAGE_KEY = 'vg_backlog_list_v2';
     function loadGames() {
       return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
     }
@@ -355,9 +449,23 @@
     const filterSelect = document.getElementById('filterSelect');
     const emptyState = document.getElementById('emptyState');
 
+    // Cover Art DOM
+    const coverPreviewRow = document.getElementById('coverPreviewRow');
+    const coverPreviewContainer = document.getElementById('coverPreviewContainer');
+    const coverSearching = document.getElementById('coverSearching');
+    const retryCoverBtn = document.getElementById('retryCoverBtn');
+
     // App State
     let games = loadGames();
     let editingGameId = null;
+
+    // For cover search in modal
+    let coverSearchTimeout = null;
+    let coverResult = { url: null, title: null, error: null };
+    let lastCoverQuery = { title: '', platform: '' };
+
+    // RAWG API
+    const RAWG_API = 'https://api.rawg.io/api/games';
 
     // ---- Core CRUD ----
 
@@ -398,16 +506,28 @@
         card.className = 'game-card';
         card.setAttribute('data-status', game.status);
 
+        // Cover
+        let coverHtml = '';
+        if (game.coverUrl) {
+          coverHtml = `<img src="${escapeHTML(game.coverUrl)}" class="game-cover" alt="Cover art for ${escapeHTML(game.title)}" loading="lazy" onerror="this.onerror=null;this.src='';this.style.display='none';"/>`;
+        } else {
+          // fallback: controller emoji
+          coverHtml = `<div class="game-cover cover-preview-fallback" title="No cover found">🎮</div>`;
+        }
+
         card.innerHTML = `
-          <div class="game-title">${game.title}</div>
-          <div class="game-platform">🕹️ ${game.platform}</div>
-          <div class="game-status">
-            <span class="status-badge status-${game.status.replace(" ", "\\ ")}">${game.status}</span>
-          </div>
-          <div class="game-notes">${game.notes ? escapeHTML(game.notes) : ''}</div>
-          <div class="game-actions">
-            <button class="btn btn-ghost" data-action="edit" title="Edit Game">✏️ Edit</button>
-            <button class="btn btn-danger" data-action="delete" title="Delete Game">🗑️ Delete</button>
+          ${coverHtml}
+          <div class="game-info">
+            <div class="game-title">${game.title}</div>
+            <div class="game-platform">🕹️ ${game.platform}</div>
+            <div class="game-status">
+              <span class="status-badge status-${game.status.replace(" ", "\\ ")}">${game.status}</span>
+            </div>
+            <div class="game-notes">${game.notes ? escapeHTML(game.notes) : ''}</div>
+            <div class="game-actions">
+              <button class="btn btn-ghost" data-action="edit" title="Edit Game">✏️ Edit</button>
+              <button class="btn btn-danger" data-action="delete" title="Delete Game">🗑️ Delete</button>
+            </div>
           </div>
         `;
         // Actions
@@ -423,8 +543,14 @@
       modalTitle.textContent = 'Add Game';
       gameForm.reset();
       gameStatusInput.value = 'Not Started';
+      coverResult = { url: null, title: null, error: null };
+      lastCoverQuery = { title: '', platform: '' };
+      updateCoverPreview();
       modal.style.display = 'flex';
       setTimeout(() => gameTitleInput.focus(), 100);
+
+      // Start cover search when title changes
+      setupCoverSearchInputs();
     }
 
     function openEditGame(id) {
@@ -436,13 +562,29 @@
       gamePlatformInput.value = game.platform;
       gameStatusInput.value = game.status;
       gameNotesInput.value = game.notes || '';
+      coverResult = {
+        url: game.coverUrl || null,
+        title: game.title,
+        error: null
+      };
+      lastCoverQuery = { title: game.title, platform: game.platform };
+      updateCoverPreview();
       modal.style.display = 'flex';
       setTimeout(() => gameTitleInput.focus(), 100);
+
+      // Start cover search when title changes
+      setupCoverSearchInputs();
     }
 
     function closeModal() {
       editingGameId = null;
       modal.style.display = 'none';
+      coverResult = { url: null, title: null, error: null };
+      lastCoverQuery = { title: '', platform: '' };
+      coverPreviewRow.style.display = 'none';
+      coverSearching.style.display = 'none';
+      retryCoverBtn.style.display = 'none';
+      if (coverSearchTimeout) clearTimeout(coverSearchTimeout);
     }
 
     function addOrUpdateGame(e) {
@@ -456,11 +598,25 @@
         alert('Title and Platform are required.');
         return;
       }
+      // If cover search is in progress, warn
+      if (coverSearching.style.display === 'flex') {
+        if (!confirm("Cover art is still searching. Save anyway?")) return;
+      }
+
+      // If no cover found, it's ok (fallback will display)
+
       if (editingGameId) {
         // Update
         const idx = games.findIndex(g => g.id === editingGameId);
         if (idx !== -1) {
-          games[idx] = { ...games[idx], title, platform, status, notes };
+          games[idx] = {
+            ...games[idx],
+            title,
+            platform,
+            status,
+            notes,
+            coverUrl: coverResult.url || null
+          };
         }
       } else {
         // Add
@@ -469,7 +625,8 @@
           title,
           platform,
           status,
-          notes
+          notes,
+          coverUrl: coverResult.url || null
         });
       }
       saveGames(games);
@@ -489,6 +646,104 @@
       return str.replace(/[&<>"']/g, s => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
       })[s]);
+    }
+
+    // ---- Cover Art API Search ----
+
+    function setupCoverSearchInputs() {
+      // Clean up
+      gameTitleInput.oninput = onCoverInputChange;
+      gamePlatformInput.oninput = onCoverInputChange;
+      retryCoverBtn.onclick = () => {
+        fetchCover(gameTitleInput.value.trim(), gamePlatformInput.value.trim(), true);
+      };
+      onCoverInputChange();
+    }
+
+    function onCoverInputChange() {
+      // Debounce
+      if (coverSearchTimeout) clearTimeout(coverSearchTimeout);
+      coverSearchTimeout = setTimeout(() => {
+        const title = gameTitleInput.value.trim();
+        const platform = gamePlatformInput.value.trim();
+        if (!title) {
+          coverResult = { url: null, title: null, error: null };
+          updateCoverPreview();
+          return;
+        }
+        // Only search if changed
+        if (title !== lastCoverQuery.title || platform !== lastCoverQuery.platform) {
+          fetchCover(title, platform, false);
+        }
+      }, 400);
+    }
+
+    function updateCoverPreview() {
+      if (!gameTitleInput.value.trim()) {
+        coverPreviewRow.style.display = 'none';
+        coverSearching.style.display = 'none';
+        retryCoverBtn.style.display = 'none';
+        coverPreviewContainer.innerHTML = '';
+        return;
+      }
+      coverPreviewRow.style.display = 'flex';
+      retryCoverBtn.style.display = coverResult.error ? 'inline-block' : 'none';
+      // Show spinner
+      if (coverSearching.style.display === 'flex') {
+        coverPreviewContainer.innerHTML = '';
+      } else if (coverResult.url) {
+        coverPreviewContainer.innerHTML = `<img class="cover-preview-img" src="${escapeHTML(coverResult.url)}" alt="Cover art preview" onerror="this.onerror=null;this.style.display='none';"/>`;
+      } else if (coverResult.error) {
+        coverPreviewContainer.innerHTML = `<div class="cover-preview-fallback" title="No cover found">🎮</div>
+        <span style="color:#f87171;font-size:0.96em;display:block;">${coverResult.error}</span>`;
+      } else {
+        coverPreviewContainer.innerHTML = `<div class="cover-preview-fallback" title="No cover found">🎮</div>`;
+      }
+    }
+
+    function fetchCover(title, platform, force) {
+      coverSearching.style.display = 'flex';
+      coverResult = { url: null, title: null, error: null };
+      updateCoverPreview();
+
+      lastCoverQuery = { title, platform };
+      // RAWG search: https://api.rawg.io/api/games?search=zelda+switch&page_size=3
+      let query = encodeURIComponent(title);
+      if (platform) query += '+' + encodeURIComponent(platform);
+      fetch(`${RAWG_API}?search=${query}&page_size=5`)
+        .then(r => r.json())
+        .then(data => {
+          // Try to find the best match
+          let found = null;
+          if (data.results && data.results.length) {
+            // Fuzzy match: prefer exact title, and platform in slug
+            const titleLc = title.toLowerCase();
+            const platLc = platform ? platform.toLowerCase() : '';
+            found = data.results.find(
+              g => g.name.toLowerCase() === titleLc &&
+                   (!platLc || (g.platforms && g.platforms.some(p => p.platform.name.toLowerCase().includes(platLc))))
+            );
+            if (!found) {
+              // fallback: first with title containing input
+              found = data.results.find(
+                g => g.name.toLowerCase().includes(titleLc)
+              );
+            }
+            if (!found) found = data.results[0];
+          }
+          if (found && found.background_image) {
+            coverResult = { url: found.background_image, title: found.name, error: null };
+          } else {
+            coverResult = { url: null, title: null, error: 'No cover found.' };
+          }
+        })
+        .catch(() => {
+          coverResult = { url: null, title: null, error: 'Search failed.' };
+        })
+        .finally(() => {
+          coverSearching.style.display = 'none';
+          updateCoverPreview();
+        });
     }
 
     // ---- Event Listeners ----
