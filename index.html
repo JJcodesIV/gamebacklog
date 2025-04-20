@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Video Game Backlog Tracker</title>
+  <style>
+    :root {
+      --bg: #18181b;
+      --card: #232336;
+      --primary: #4f46e5;
+      --accent: #22d3ee;
+      --border: #2d2d44;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --radius: 10px;
+      --shadow: 0 2px 8px rgba(0,0,0,.12);
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', sans-serif;
+      min-height: 100vh;
+    }
+    header {
+      background: var(--card);
+      padding: 1.3rem 1rem;
+      text-align: center;
+      box-shadow: var(--shadow);
+      border-bottom: 1px solid var(--border);
+    }
+    header h1 {
+      margin: 0;
+      font-size: 2rem;
+      color: var(--primary);
+      letter-spacing: 1px;
+    }
+    main {
+      max-width: 900px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+    .controls, .search-sort {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .controls > * {
+      flex: 1 0 150px;
+    }
+    .search-sort {
+      flex-wrap: wrap;
+      gap: 0.7rem;
+    }
+    .search-sort input, .search-sort select {
+      padding: 0.4rem 0.6rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      font-size: 1rem;
+    }
+    .game-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.1rem;
+    }
+    @media (max-width: 700px) {
+      .game-list {
+        grid-template-columns: 1fr;
+      }
+      main {
+        margin-top: 1rem;
+      }
+    }
+    .game-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1rem 1.1rem 0.7rem 1.1rem;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      border: 1.5px solid transparent;
+      transition: border 0.2s;
+    }
+    .game-card[data-status="Completed"] {
+      border-color: var(--primary);
+    }
+    .game-card[data-status="Abandoned"] {
+      border-color: #f43f5e;
+    }
+    .game-card[data-status="In Progress"] {
+      border-color: var(--accent);
+    }
+    .game-card[data-status="Not Started"] {
+      border-color: var(--border);
+    }
+    .game-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.2rem;
+      color: var(--accent);
+      word-break: break-word;
+    }
+    .game-platform {
+      font-size: 0.97rem;
+      color: var(--primary);
+      margin-bottom: 0.5rem;
+    }
+    .game-notes {
+      font-size: 0.98rem;
+      color: var(--text-muted);
+      margin-bottom: 0.6rem;
+      white-space: pre-line;
+      word-break: break-word;
+    }
+    .game-status {
+      font-size: 0.96rem;
+      font-weight: 500;
+      margin-bottom: 0.5rem;
+    }
+    .game-actions {
+      display: flex;
+      gap: 0.6rem;
+      margin-top: auto;
+    }
+    .btn {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      padding: 0.38rem 0.9rem;
+      font-size: 0.98rem;
+      cursor: pointer;
+      transition: background 0.18s;
+      font-family: inherit;
+      margin-bottom: 0.2rem;
+    }
+    .btn:hover {
+      background: var(--accent);
+      color: var(--bg);
+    }
+    .btn-danger {
+      background: #f43f5e;
+    }
+    .btn-danger:hover {
+      background: #f87171;
+      color: #fff;
+    }
+    .btn-ghost {
+      background: none;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover {
+      background: var(--border);
+      color: var(--accent);
+    }
+    /* Modal */
+    .modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(30,30,40,0.74);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      animation: fadein 0.2s;
+    }
+    .modal-content {
+      background: var(--card);
+      padding: 2rem 1.3rem 1.3rem 1.3rem;
+      border-radius: var(--radius);
+      min-width: 280px;
+      max-width: 98vw;
+      width: 380px;
+      box-shadow: var(--shadow);
+      position: relative;
+    }
+    .modal-content h2 {
+      margin-top: 0;
+      color: var(--accent);
+      font-size: 1.2rem;
+      margin-bottom: 1.1rem;
+    }
+    .modal-content label {
+      display: block;
+      margin-bottom: 0.55rem;
+      font-size: 1rem;
+    }
+    .modal-content input, .modal-content select, .modal-content textarea {
+      width: 100%;
+      margin-bottom: 1rem;
+      padding: 0.45rem 0.6rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 1rem;
+      resize: none;
+    }
+    .modal-content textarea {
+      min-height: 60px;
+      max-height: 170px;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.7rem;
+      margin-top: 0.2rem;
+    }
+    .close-modal {
+      position: absolute;
+      top: 0.65rem;
+      right: 1.1rem;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.45rem;
+      cursor: pointer;
+      z-index: 1;
+    }
+    @keyframes fadein {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    .status-badge {
+      display: inline-block;
+      border-radius: 8px;
+      font-size: 0.93em;
+      font-weight: 500;
+      padding: 0.1em 0.7em;
+      margin-right: 0.3em;
+      margin-bottom: 0.2em;
+      letter-spacing: 0.5px;
+    }
+    .status-Not\ Started { background: #64748b; color: #fff; }
+    .status-In\ Progress { background: #22d3ee; color: #18181b; }
+    .status-Completed { background: #4f46e5; color: #fff; }
+    .status-Abandoned { background: #f43f5e; color: #fff; }
+    /* Empty state */
+    .empty-state {
+      margin: 3.5rem 0 1rem 0;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 1.1rem;
+    }
+    /* Scrollbar for dark mode */
+    ::-webkit-scrollbar {
+      width: 10px; background: var(--bg);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--card);
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎮 Video Game Backlog Tracker</h1>
+  </header>
+  <main>
+    <div class="controls">
+      <button class="btn" id="addGameBtn">+ Add New Game</button>
+      <div class="search-sort">
+        <input type="text" id="searchInput" placeholder="Search by title or platform..." />
+        <select id="sortSelect">
+          <option value="title-asc">Sort: Title (A-Z)</option>
+          <option value="title-desc">Sort: Title (Z-A)</option>
+          <option value="platform-asc">Sort: Platform (A-Z)</option>
+          <option value="platform-desc">Sort: Platform (Z-A)</option>
+        </select>
+        <select id="filterSelect">
+          <option value="All">All Statuses</option>
+          <option value="Not Started">Not Started</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Completed">Completed</option>
+          <option value="Abandoned">Abandoned</option>
+        </select>
+      </div>
+    </div>
+    <div id="gameList" class="game-list"></div>
+    <div class="empty-state" id="emptyState" style="display:none;">
+      Your backlog is empty.<br />
+      Click <b>+ Add New Game</b> to get started!
+    </div>
+  </main>
+
+  <!-- Modal -->
+  <div class="modal" id="modal" style="display:none;">
+    <div class="modal-content" id="modalContent">
+      <button class="close-modal" id="closeModalBtn" aria-label="Close">&times;</button>
+      <h2 id="modalTitle">Add Game</h2>
+      <form id="gameForm" autocomplete="off">
+        <label for="gameTitleInput">Title <span style="color:#f43f5e">*</span></label>
+        <input type="text" id="gameTitleInput" maxlength="80" required autofocus />
+        <label for="gamePlatformInput">Platform <span style="color:#f43f5e">*</span></label>
+        <input type="text" id="gamePlatformInput" maxlength="45" required />
+        <label for="gameStatusInput">Status</label>
+        <select id="gameStatusInput">
+          <option>Not Started</option>
+          <option>In Progress</option>
+          <option>Completed</option>
+          <option>Abandoned</option>
+        </select>
+        <label for="gameNotesInput">Notes</label>
+        <textarea id="gameNotesInput" maxlength="500" placeholder="Add any notes, thoughts, or goals..."></textarea>
+        <div class="modal-actions">
+          <button type="submit" class="btn" id="saveGameBtn">Save</button>
+          <button type="button" class="btn btn-ghost" id="cancelGameBtn">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // ---- Backlog App Logic ----
+
+    // Util: Generate a unique ID
+    function uuid() {
+      return 'xxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+
+    // Data persistence
+    const STORAGE_KEY = 'vg_backlog_list';
+    function loadGames() {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    }
+    function saveGames(games) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(games));
+    }
+
+    // DOM Elements
+    const gameListEl = document.getElementById('gameList');
+    const addGameBtn = document.getElementById('addGameBtn');
+    const modal = document.getElementById('modal');
+    const modalTitle = document.getElementById('modalTitle');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const cancelGameBtn = document.getElementById('cancelGameBtn');
+    const gameForm = document.getElementById('gameForm');
+    const gameTitleInput = document.getElementById('gameTitleInput');
+    const gamePlatformInput = document.getElementById('gamePlatformInput');
+    const gameStatusInput = document.getElementById('gameStatusInput');
+    const gameNotesInput = document.getElementById('gameNotesInput');
+    const searchInput = document.getElementById('searchInput');
+    const sortSelect = document.getElementById('sortSelect');
+    const filterSelect = document.getElementById('filterSelect');
+    const emptyState = document.getElementById('emptyState');
+
+    // App State
+    let games = loadGames();
+    let editingGameId = null;
+
+    // ---- Core CRUD ----
+
+    function renderGames() {
+      // Filter
+      let filteredGames = games.slice();
+      const search = searchInput.value.trim().toLowerCase();
+      const filter = filterSelect.value;
+      if (filter !== 'All') {
+        filteredGames = filteredGames.filter(g => g.status === filter);
+      }
+      if (search) {
+        filteredGames = filteredGames.filter(g =>
+          g.title.toLowerCase().includes(search) ||
+          g.platform.toLowerCase().includes(search)
+        );
+      }
+      // Sort
+      const sort = sortSelect.value;
+      filteredGames.sort((a, b) => {
+        if (sort === 'title-asc') return a.title.localeCompare(b.title);
+        if (sort === 'title-desc') return b.title.localeCompare(a.title);
+        if (sort === 'platform-asc') return a.platform.localeCompare(b.platform);
+        if (sort === 'platform-desc') return b.platform.localeCompare(a.platform);
+        return 0;
+      });
+
+      // Render
+      gameListEl.innerHTML = '';
+      if (filteredGames.length === 0) {
+        emptyState.style.display = 'block';
+        return;
+      }
+      emptyState.style.display = 'none';
+
+      for (const game of filteredGames) {
+        const card = document.createElement('div');
+        card.className = 'game-card';
+        card.setAttribute('data-status', game.status);
+
+        card.innerHTML = `
+          <div class="game-title">${game.title}</div>
+          <div class="game-platform">🕹️ ${game.platform}</div>
+          <div class="game-status">
+            <span class="status-badge status-${game.status.replace(" ", "\\ ")}">${game.status}</span>
+          </div>
+          <div class="game-notes">${game.notes ? escapeHTML(game.notes) : ''}</div>
+          <div class="game-actions">
+            <button class="btn btn-ghost" data-action="edit" title="Edit Game">✏️ Edit</button>
+            <button class="btn btn-danger" data-action="delete" title="Delete Game">🗑️ Delete</button>
+          </div>
+        `;
+        // Actions
+        const [editBtn, delBtn] = card.querySelectorAll('button');
+        editBtn.onclick = () => openEditGame(game.id);
+        delBtn.onclick = () => deleteGame(game.id);
+        gameListEl.appendChild(card);
+      }
+    }
+
+    function openAddGame() {
+      editingGameId = null;
+      modalTitle.textContent = 'Add Game';
+      gameForm.reset();
+      gameStatusInput.value = 'Not Started';
+      modal.style.display = 'flex';
+      setTimeout(() => gameTitleInput.focus(), 100);
+    }
+
+    function openEditGame(id) {
+      const game = games.find(g => g.id === id);
+      if (!game) return;
+      editingGameId = id;
+      modalTitle.textContent = 'Edit Game';
+      gameTitleInput.value = game.title;
+      gamePlatformInput.value = game.platform;
+      gameStatusInput.value = game.status;
+      gameNotesInput.value = game.notes || '';
+      modal.style.display = 'flex';
+      setTimeout(() => gameTitleInput.focus(), 100);
+    }
+
+    function closeModal() {
+      editingGameId = null;
+      modal.style.display = 'none';
+    }
+
+    function addOrUpdateGame(e) {
+      e.preventDefault();
+      const title = gameTitleInput.value.trim();
+      const platform = gamePlatformInput.value.trim();
+      const status = gameStatusInput.value;
+      const notes = gameNotesInput.value.trim();
+
+      if (!title || !platform) {
+        alert('Title and Platform are required.');
+        return;
+      }
+      if (editingGameId) {
+        // Update
+        const idx = games.findIndex(g => g.id === editingGameId);
+        if (idx !== -1) {
+          games[idx] = { ...games[idx], title, platform, status, notes };
+        }
+      } else {
+        // Add
+        games.push({
+          id: uuid(),
+          title,
+          platform,
+          status,
+          notes
+        });
+      }
+      saveGames(games);
+      renderGames();
+      closeModal();
+    }
+
+    function deleteGame(id) {
+      if (confirm('Delete this game from your backlog?')) {
+        games = games.filter(g => g.id !== id);
+        saveGames(games);
+        renderGames();
+      }
+    }
+
+    function escapeHTML(str) {
+      return str.replace(/[&<>"']/g, s => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[s]);
+    }
+
+    // ---- Event Listeners ----
+
+    addGameBtn.onclick = openAddGame;
+    closeModalBtn.onclick = closeModal;
+    cancelGameBtn.onclick = closeModal;
+    modal.onclick = e => {
+      if (e.target === modal) closeModal();
+    };
+    gameForm.onsubmit = addOrUpdateGame;
+    searchInput.oninput = renderGames;
+    sortSelect.onchange = renderGames;
+    filterSelect.onchange = renderGames;
+
+    // Keyboard: ESC to close modal
+    document.addEventListener('keydown', e => {
+      if (modal.style.display === 'flex' && e.key === 'Escape') {
+        closeModal();
+      }
+    });
+
+    // ---- Initialize ----
+    renderGames();
+  </script>
+</body>
+</html>
